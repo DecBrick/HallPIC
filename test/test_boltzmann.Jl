@@ -83,5 +83,5 @@ function Boltzmann_basic_test()
 end 
 
 
-#@benchmark Boltzmann_basic_test() seconds = 300
+@benchmark Boltzmann_basic_test() seconds = 300
 @profview Boltzmann_basic_test()

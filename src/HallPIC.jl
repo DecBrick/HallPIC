@@ -189,7 +189,7 @@ end
 $(TYPEDSIGNATURES)
 Add particles to a `ParticleContainer`.
 """
-function add_particles!(pc::ParticleContainer{T}, x::Vector{T}, v::Vector{T}, w::Vector{T}) where T
+function add_particles!(pc::ParticleContainer{T}, x::Vector{T}, v::Vector{T}, w::Vector{T}, index::Vector{Int}) where T
 	# check that new arrays have same length
 	M = length(x)
 	N = length(pc)
@@ -198,12 +198,11 @@ function add_particles!(pc::ParticleContainer{T}, x::Vector{T}, v::Vector{T}, w:
 	append!(pc.pos, x)
 	append!(pc.vel, v)
 	append!(pc.weight, w)
+    append!(pc.inds, index)
 	# extend acceleration array to correct size and fill with zeros
 	resize!(pc.acc, N+M)
-    resize!(pc.inds, N+M)
 	for i in 1:M
 		pc.acc[N+i] = zero(T)
-        pc.inds[N+i] = zero(T)
 	end
 	return pc
 end
@@ -365,6 +364,7 @@ function initialize_particles(sp::SpeciesProperties{T}, grid, particles_per_cell
 	pos_buf = zeros(T, particles_per_cell)
 	vel_buf = zeros(T, particles_per_cell)
 	weight_buf = zeros(T, particles_per_cell)
+    inds_buf = zeros(Int, particles_per_cell)
 	@assert length(grid.cell_centers) == length(sp)
 
 	pc = ParticleContainer{T}(0, sp.species)
@@ -383,6 +383,8 @@ function initialize_particles(sp::SpeciesProperties{T}, grid, particles_per_cell
         # In addition to being smoother than random particles, it also causes the particles to be sorted by position.
 		pos_buf .= range(z_L + dz_part/2, z_R - dz_part/2, length=particles_per_cell)
 
+        inds_buf = copysign.(i, grid.cell_centers[i] .- pos_buf)
+
 		Random.randn!(vel_buf)
 		@. vel_buf *= sqrt(T_itp(pos_buf) / pc.species.gas.mass)
 		@. vel_buf = vel_buf + u_itp(pos_buf)
@@ -390,7 +392,7 @@ function initialize_particles(sp::SpeciesProperties{T}, grid, particles_per_cell
         V = grid.cell_volumes[i]
 		@. weight_buf = n_itp(pos_buf) / particles_per_cell * V
 
-		add_particles!(pc, pos_buf, vel_buf, weight_buf)
+		add_particles!(pc, pos_buf, vel_buf, weight_buf, inds_buf)
 	end
 
 	return pc
@@ -761,6 +763,7 @@ function generate_products!(products::Vector{ParticleContainer{T}}, product_prop
     pos_buf = T[]
     vel_buf = T[]
     weight_buf = T[]
+    inds_buf = Int[]
 
     dz = grid.face_centers[2:end] - grid.face_centers[1:end-1]
     # for each product 
@@ -787,6 +790,7 @@ function generate_products!(products::Vector{ParticleContainer{T}}, product_prop
             z_L = grid.face_centers[i]
             Random.rand!(pos_buf)
             pos_buf .= dz[i] * pos_buf .+ z_L
+            inds_buf = copysign.(i, grid.cell_centers[i] .- pos_buf)
 
             # velocity, fix to use reactant mass
             v_th = sqrt(reactant_properties.temp[i] / product.species.gas.mass)
@@ -796,7 +800,7 @@ function generate_products!(products::Vector{ParticleContainer{T}}, product_prop
             # weight
             weight_buf .= w_gen 
             # actual generation  
-            add_particles!(product, pos_buf, vel_buf, weight_buf)
+            add_particles!(product, pos_buf, vel_buf, weight_buf, inds_buf)
         end
     end 
 
@@ -845,9 +849,7 @@ function update_particles!(particles::Vector{ParticleContainer{T}}, reactions::V
 
     # locate and push 
     for container in particles
-        locate_particles!(container, grid)
         push!(container, dt, grid)
-        # resolve boundary conditions here 
         locate_particles!(container, grid)
     end 
 

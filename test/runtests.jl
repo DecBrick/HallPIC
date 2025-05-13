@@ -42,8 +42,9 @@ function test_add_particles(::Type{T}) where T
 	pos = [T(1.57), T(0.51)]
 	vel = [T(19823.1041), T(981.471)]
 	weight = [T(1.589e16), T(1.589e16)]
+	inds = [1,2]
 
-	particles = hp.add_particles!(particles, pos, vel, weight)
+	particles = hp.add_particles!(particles, pos, vel, weight, inds)
 
 	# check them 
 	@test length(particles.pos) == 2
@@ -61,6 +62,10 @@ function test_add_particles(::Type{T}) where T
 	@test length(particles.acc) == 2
 	@test particles.acc[1] == 0
 	@test particles.acc[2] == 0
+
+	@test length(particles.inds) == 2
+	@test particles.inds[1] == inds[1]
+	@test particles.inds[2] == inds[2]
 end
 
 @testset "Add particles" begin
@@ -76,8 +81,9 @@ end
 	pos = [1.57, 0.51, -1.00]
 	vel = [19823.1041, 981.471, 4319.42]
 	weight = [1.589e16, 1.589e16, 1.589e16]
-	particles = hp.add_particles!(particles, pos, vel, weight)
-	og_particles = hp.add_particles!(particles, pos, vel, weight)
+	inds = [0, 0, 0]
+	particles = hp.add_particles!(particles, pos, vel, weight, inds)
+	og_particles = hp.add_particles!(particles, pos, vel, weight, inds)
 	# Grid object
 	N=10
 	left_boundary = hp.OpenBoundary()
