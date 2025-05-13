@@ -200,13 +200,13 @@ function test_linear_drop(::Type{T}, V) where T
 	M = 100
 	L = 0.05
 	x = LinRange(0, L, M)
-	E = V / L * ones(M)
+	E = V / L * ones(T, M)
 
 	x_norm = x ./ hp.x_0
-	E_norm = E ./ hp.E_0
+	E_norm = T.(E ./ hp.E_0)
 
-	extrap = hp.DataInterpolations.ExtrapolationType.Constant
-	E_itp = hp.LinearInterpolation(E_norm, x_norm, extrapolation = extrap)
+	#extrap = hp.DataInterpolations.ExtrapolationType.Constant
+	#E_itp = hp.LinearInterpolation(E_norm, x_norm, extrapolation = extrap)
 
 	q = hp.charge(pc.species) * hp.q_e
 	m = hp.mass(pc.species) * hp.m_0
@@ -218,13 +218,14 @@ function test_linear_drop(::Type{T}, V) where T
 	# pushback step
 	grid = hp.Grid(1, 0, 1, 1, hp.WallBoundary(0.5), hp.WallBoundary(0.5))
 	pc.weight[1] = 1e16
-	hp.gather!(pc, E_itp)
+	pc.inds[1] = 1
+	hp.gather!(pc, grid, E_norm)
 	hp.push_vel!(pc, -dt_norm/2)
 
 	t = 0.0
 	while pc.pos[1] < x_norm[end] 
 		t += dt_norm
-		hp.gather!(pc, E_itp)
+		hp.gather!(pc, grid, E_norm)
 		hp.push!(pc, dt_norm, grid)
 	end
 

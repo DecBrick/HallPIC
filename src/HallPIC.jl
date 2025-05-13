@@ -222,13 +222,7 @@ function push_vel!(pc::ParticleContainer, dt::AbstractFloat)
 end
 
 
-function gather!(pc::ParticleContainer{T}, E_itp::LinearInterpolation) where T
-	q_m = charge_to_mass(pc.species)
-	@inbounds for i in eachindex(pc.pos)
-		pc.acc[i] = T(q_m * E_itp(pc.pos[i]))
-	end
-	return pc
-end
+
 
 """
 $(TYPEDEF)
@@ -432,10 +426,10 @@ end
 $(TYPEDSIGNATURES)
 """
 function locate_particles!(pc::ParticleContainer{T}, grid::Grid) where T
-    for (i, x) in enumerate(pc.pos)
+    @inbounds for (i, x) in enumerate(pc.pos)
         cell_index = searchsortedfirst(grid.face_centers, x) - 1
         center_pos = grid.cell_centers[cell_index]
-        pc.inds[i] = copysign(cell_index, x - center_pos)
+        pc.inds[i] = sign(x-center_pos) * cell_index 
     end
 
     return pc.inds
@@ -532,14 +526,6 @@ function deposit!(fluid_properties::SpeciesProperties{T}, particles::ParticleCon
         # or negative if it is left of the cell center
         s, ic = find_cell_indices(particles.inds[ip], grid)
 
-        if (s+ic > 12) || (s+ic < 1) 
-            @show s
-            @show ic 
-            @show particles.pos[ip]
-            @show particles.vel[ip]
-            @show particles.acc[ip]
-            @show grid.dz
-        end
         # Grid information and cell weighting
         inv_vol_c = 1 / grid.cell_volumes[ic]
         inv_vol_s = 1 / grid.cell_volumes[ic+s]
@@ -635,7 +621,15 @@ function deposit!(fluid_properties::SpeciesProperties{T}, particles::ParticleCon
     return fluid_properties
 end
 
-
+function gather!(pc::ParticleContainer{T}, grid::Grid , E::Vector{T}) where T
+	q_m = charge_to_mass(pc.species)
+	@inbounds for i in eachindex(pc.pos)
+        idx = abs(pc.inds[i])
+        dist = (grid.face_centers[idx+1] - pc.pos[i])/ grid.dz
+		pc.acc[i] = T(q_m * (E[idx+1] * (1 - dist) + E[idx] * dist))
+	end
+	return pc
+end
 
 function calc_electron_density_and_avg_charge!(n_e::Vector{T}, avg_charge::Vector{T}, species::Vector{SpeciesProperties{T}}) where T
     n_e .= zero(T)
@@ -892,9 +886,8 @@ function iterate!(particles::Vector{ParticleContainer{T}}, reactions::Vector{Rea
     boltzmann_electric_field_and_potential!(E_array, Phi, electrons.dens, electrons.temp, grid)
 
     # gather step 
-    E = LinearInterpolation(E_array, grid.face_centers)
     for (ip, particle) in enumerate(particles)
-        gather!(particle, E)
+        gather!(particle, grid, E_array)
     end
 
     return particles, reactions, bulk_properties, electrons, E_array, Phi 

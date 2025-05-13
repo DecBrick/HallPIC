@@ -10,8 +10,8 @@ function Boltzmann_basic_test()
 	T = Float64
 	# general initialization 
 	n_iterations = 1000
-	n_cell = 10
-	n_n = 5000
+	n_cell = 100
+	n_n = 100
 	dt = T(75e-9 / hp.t_0)
 	grid = hp.Grid(n_cell, 0, 0.1 / hp.x_0, 0.1 / hp.x_0^2, hp.OpenBoundary(), hp.OpenBoundary())
 	E = zeros(T, length(grid.face_centers))
@@ -77,11 +77,11 @@ function Boltzmann_basic_test()
 
 	#display(plot(grid.cell_centers, Statistics.mean(outputs.phi, dims=1)[:]))
 
-	open("boltzmann_output.json", "w") do f 
-		JSON3.print(f, outputs)
-	end
+	#open("boltzmann_output.json", "w") do f 
+#		JSON3.print(f, outputs)
+#	end
 end 
 
-
-@benchmark Boltzmann_basic_test() seconds = 300
+#Boltzmann_basic_test()
+#@benchmark Boltzmann_basic_test() seconds = 20
 @profview Boltzmann_basic_test()
