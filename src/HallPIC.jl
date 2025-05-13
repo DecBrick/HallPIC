@@ -823,7 +823,7 @@ end
 function update_particles!(particles::Vector{ParticleContainer{T}}, reactions::Vector{Reaction{T}}, bulk_properties::Vector{SpeciesProperties{T}}, electrons::SpeciesProperties{T},  grid::Grid, dt::T) where T
 
     # reaction step 
-    for (ir, reaction) in enumerate(reactions)
+    for reaction in reactions
 
         # find the relevant containers and properties 
         reactant = particles[reaction.reactant_idx]
@@ -844,7 +844,7 @@ function update_particles!(particles::Vector{ParticleContainer{T}}, reactions::V
     end
 
     # locate and push 
-    for (ic, container) in enumerate(particles)
+    for container in particles
         locate_particles!(container, grid)
         push!(container, dt, grid)
         # resolve boundary conditions here 
