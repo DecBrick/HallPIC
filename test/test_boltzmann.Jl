@@ -6,16 +6,18 @@ using BenchmarkTools
 
 const Xenon = hp.Gas(name=:Xe, mass=131.293)
 
-function Boltzmann_basic_test()
+function Boltzmann_basic_test(n_cell, n_n)
 	T = Float64
 	# general initialization 
-	n_iterations = 1000
-	n_cell = 100
-	n_n = 100
-	dt = T(75e-9 / hp.t_0)
 	grid = hp.Grid(n_cell, 0, 0.1 / hp.x_0, 0.1 / hp.x_0^2, hp.OpenBoundary(), hp.OpenBoundary())
 	E = zeros(T, length(grid.face_centers))
 	phi = zeros(T, length(grid.cell_centers))
+
+	#time initialization
+	CFL = 1e-5
+	dt = T(CFL * grid.dz / hp.u_0 / hp.t_0)
+	time = 1000 * T(75e-9/hp.t_0)
+	n_iterations = Int(floor(time / dt))
 
 	# initialize neutrals 
 	neutral_properties = hp.SpeciesProperties{T}(n_cell+2, Xenon(0))
@@ -56,7 +58,7 @@ function Boltzmann_basic_test()
 
 	#threshold_energy, table = hp.read_reaction_rates("../reactions/ionization_Xe_Xe+.dat")
 	threshold_energy, table = hp.read_reaction_rates("C:/Users/brickd/.julia/dev/HallPIC/reactions/ionization_Xe_Xe+.dat")
-	reaction = hp.Reaction{T}(table, [Xenon(1)], zeros(n_cell+2), zeros(n_cell+2), [2], [1], Xenon(0), threshold_energy, 1)
+	reaction = hp.Reaction{T, typeof(table)}(table, [Xenon(1)], zeros(n_cell+2), zeros(n_cell+2), [2], [1], Xenon(0), threshold_energy, 1)
 
 
 	# put everything into the format expected by the iterator 
@@ -74,14 +76,29 @@ function Boltzmann_basic_test()
 		hp.save_output!(outputs, bulk_properties, phi, E)
 	end
 
-
+	
 	#display(plot(grid.cell_centers, Statistics.mean(outputs.phi, dims=1)[:]))
 
+	return grid.cell_centers, Statistics.mean(outputs.phi, dims=1)[:]
 	#open("boltzmann_output.json", "w") do f 
 #		JSON3.print(f, outputs)
 #	end
 end 
 
-#Boltzmann_basic_test()
+
+plot()
+#figure()
+for n_cells in [100]
+	for n_particles in [100, 1000, 10000, 100000]
+		@show n_cells, n_particles
+				
+		centers, phi = Boltzmann_basic_test(n_cells, n_particles)
+		display(plot!(centers, phi))
+	end
+end
+
+
+#Boltzmann_basic_test(100, 100)
+
 #@benchmark Boltzmann_basic_test() seconds = 20
-@profview Boltzmann_basic_test()
+#@profview Boltzmann_basic_test()8

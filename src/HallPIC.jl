@@ -29,6 +29,7 @@ const n_0 = 1e12
 const phi_0 = 1.0
 const m_e = 0.00054858 #normalized electron mass 
 
+
 # Derived quantities
 const x_0 = 1 / cbrt(n_0)
 const u_0 = sqrt(q_e * phi_0 / m_0)
@@ -77,7 +78,7 @@ struct ParticleContainer{T<:AbstractFloat}
     pos::Vector{T}
     vel::Vector{T}
     acc::Vector{T}
-    inds::Vector{Int}
+    inds::Vector{Int64}
 	species::Species
     n_d::Int32
 end
@@ -87,7 +88,7 @@ function ParticleContainer{T}(N, species::Species) where T<:AbstractFloat
 	pos = zeros(T, N)
 	vel = zeros(T, N)
 	acc = zeros(T, N)
-    inds = zeros(Int, N)
+    inds = zeros(Int64, N)
     n_d = 500 # hard code for now, should be a simulation hyperparamter
 	return ParticleContainer{T}(
 		weight, pos, vel, acc, inds, species, n_d 
@@ -189,7 +190,7 @@ end
 $(TYPEDSIGNATURES)
 Add particles to a `ParticleContainer`.
 """
-function add_particles!(pc::ParticleContainer{T}, x::Vector{T}, v::Vector{T}, w::Vector{T}, index::Vector{Int}) where T
+function add_particles!(pc::ParticleContainer{T}, x::Vector{T}, v::Vector{T}, w::Vector{T}, index::Vector{Int64}) where T
 	# check that new arrays have same length
 	M = length(x)
 	N = length(pc)
@@ -221,7 +222,15 @@ function push_vel!(pc::ParticleContainer, dt::AbstractFloat)
 	return pc
 end
 
+"""
+$(TYPEDEF)
 
+Boundary Loops back around 
+"""
+
+struct PeriodicBoundary 
+
+end
 
 
 """
@@ -358,7 +367,7 @@ function initialize_particles(sp::SpeciesProperties{T}, grid, particles_per_cell
 	pos_buf = zeros(T, particles_per_cell)
 	vel_buf = zeros(T, particles_per_cell)
 	weight_buf = zeros(T, particles_per_cell)
-    inds_buf = zeros(Int, particles_per_cell)
+    inds_buf = zeros(Int64, particles_per_cell)
 	@assert length(grid.cell_centers) == length(sp)
 
 	pc = ParticleContainer{T}(0, sp.species)
@@ -427,9 +436,10 @@ $(TYPEDSIGNATURES)
 """
 function locate_particles!(pc::ParticleContainer{T}, grid::Grid) where T
     @inbounds for (i, x) in enumerate(pc.pos)
-        cell_index = searchsortedfirst(grid.face_centers, x) - 1
+        
+        cell_index = floor(Int64, x / grid.dz) + 2
         center_pos = grid.cell_centers[cell_index]
-        pc.inds[i] = sign(x-center_pos) * cell_index 
+        pc.inds[i] = copysign(cell_index, x-center_pos)
     end
 
     return pc.inds
@@ -446,6 +456,24 @@ function find_cell_indices(cell_index, grid::Grid)
     end
 
     return s, ic
+end
+
+function apply_boundary!(pc::ParticleContainer, grid::Grid, ::PeriodicBoundary, flag::Int8)
+    # flagging particles, then call remove flagged particles at the end of every step  
+    if flag == -1
+        for (ip, pos) in enumerate(pc.pos)
+            if (pos - grid.face_centers[2])/grid.dz <= -0.5  
+                pc.weight[ip] = 0.0
+            end
+        end
+    else
+        for (ip, pos) in enumerate(pc.pos)
+            if (pos - grid.face_centers[end-1])/grid.dz >= 0.5  
+                pc.weight[ip] = 0.0
+            end
+        end
+    end
+    return pc
 end
 
 function apply_boundary!(pc::ParticleContainer, grid::Grid, ::OpenBoundary, flag::Int8)
@@ -514,11 +542,12 @@ Deposit particle properties into a gridded SpeciesProperties object
 function deposit!(fluid_properties::SpeciesProperties{T}, particles::ParticleContainer, grid::Grid, avg_interval=50) where T
 
     # zero density, velocity, temperature, particle count
-    fluid_properties.dens .= zero(T)
-    fluid_properties.vel .= zero(T)
-    fluid_properties.temp .= zero(T)
-    fluid_properties.N_particles .= 0
-
+    for i in eachindex(fluid_properties.dens)
+        fluid_properties.dens[i] = 0
+        fluid_properties.vel[i] = 0
+        fluid_properties.temp[i] = 0
+        fluid_properties.N_particles[i] = 0
+    end
     # loop over particles, deposit density and momentum density
     for (ip, z_part) in enumerate(particles.pos)
 
@@ -675,8 +704,8 @@ end
 Reactions definitions
 ======================================================#
 
-struct Reaction{T<:AbstractFloat}
-    rate_table::LinearInterpolation
+struct Reaction{T<:AbstractFloat, L<:LinearInterpolation}
+    rate_table::L
     products::Vector{Species}
     delta_n::Vector{T}
     delta_n_remainder::Vector{T}
@@ -689,7 +718,7 @@ end
 
 
 
-function deplete_reactant!(reaction::Reaction{T}, reactant::ParticleContainer{T}, reactant_properties::SpeciesProperties{T}, products::Vector{ParticleContainer{T}}, product_properties::Vector{SpeciesProperties{T}}, grid::Grid, electron_properties::SpeciesProperties{T}, dt) where T
+function deplete_reactant!(reaction::Reaction, reactant::ParticleContainer{T}, reactant_properties::SpeciesProperties{T}, products::Vector{ParticleContainer{T}}, product_properties::Vector{SpeciesProperties{T}}, grid::Grid, electron_properties::SpeciesProperties{T}, dt) where T
 
     # for each (non-ghost) cell, calculate the change in number density due to the reaction (delta n)
     for i in 2:length(grid.cell_centers)-1
@@ -757,7 +786,7 @@ function generate_products!(products::Vector{ParticleContainer{T}}, product_prop
     pos_buf = T[]
     vel_buf = T[]
     weight_buf = T[]
-    inds_buf = Int[]
+    inds_buf = Int64[]
 
     dz = grid.face_centers[2:end] - grid.face_centers[1:end-1]
     # for each product 
@@ -813,12 +842,12 @@ function read_reaction_rates(filepath)
     # to maintain the normalization, the two densities need to be multiplied by n_0 
     # and the entire addition divided by n_0, results in a net multiplication of n_0
     # timestep is assumed to be normalized by t_0, so multiply by t_0 as well 
-    interp_object = LinearInterpolation(values[:,2] * n_0 * t_0, values[:,1])
+    interp_object = LinearInterpolation(values[:,2] * n_0 * t_0 * 0.0, values[:,1])
     return energy, interp_object
 end
 
 
-function update_particles!(particles::Vector{ParticleContainer{T}}, reactions::Vector{Reaction{T}}, bulk_properties::Vector{SpeciesProperties{T}}, electrons::SpeciesProperties{T},  grid::Grid, dt::T) where T
+function update_particles!(particles::Vector{ParticleContainer{T}}, reactions::Vector{R}, bulk_properties::Vector{SpeciesProperties{T}}, electrons::SpeciesProperties{T},  grid::Grid, dt::T) where {T, R<:Reaction}
 
     # reaction step 
     for reaction in reactions
@@ -869,7 +898,7 @@ function update_electron_density!(electrons::SpeciesProperties{T}, heavy_species
 end
 
 
-function iterate!(particles::Vector{ParticleContainer{T}}, reactions::Vector{Reaction{T}}, bulk_properties::Vector{SpeciesProperties{T}}, electrons::SpeciesProperties{T},E_array::Vector{T}, Phi::Vector{T}, grid::Grid, dt::T) where T
+function iterate!(particles::Vector{ParticleContainer{T}}, reactions::Vector{R}, bulk_properties::Vector{SpeciesProperties{T}}, electrons::SpeciesProperties{T},E_array::Vector{T}, Phi::Vector{T}, grid::Grid, dt::T) where {T, R<:Reaction}
 
     # first update the particles
     update_particles!(particles, reactions, bulk_properties, electrons, grid, dt)

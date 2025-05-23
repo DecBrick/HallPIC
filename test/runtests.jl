@@ -1,6 +1,7 @@
 using HallPIC: HallPIC as hp
 using Documenter
 using Test
+using DataInterpolations: LinearInterpolation
 
 Documenter.doctest(hp)
 
@@ -42,7 +43,7 @@ function test_add_particles(::Type{T}) where T
 	pos = [T(1.57), T(0.51)]
 	vel = [T(19823.1041), T(981.471)]
 	weight = [T(1.589e16), T(1.589e16)]
-	inds = [1,2]
+	inds = Int64.([1,2])
 
 	particles = hp.add_particles!(particles, pos, vel, weight, inds)
 
@@ -81,7 +82,7 @@ end
 	pos = [1.57, 0.51, -1.00]
 	vel = [19823.1041, 981.471, 4319.42]
 	weight = [1.589e16, 1.589e16, 1.589e16]
-	inds = [0, 0, 0]
+	inds = Int64.([0, 0, 0])
 	particles = hp.add_particles!(particles, pos, vel, weight, inds)
 	og_particles = hp.add_particles!(particles, pos, vel, weight, inds)
 	# Grid object
@@ -304,10 +305,10 @@ end
 	@test pc.inds[1] == 52
 	@test pc.inds[2] == -52
 	@test pc.inds[3] == 52
-	@test pc.inds[4] == 1
+	@test pc.inds[4] == -2
 	@test pc.inds[5] == -1
-	@test pc.inds[6] == 2
-	@test pc.inds[7] == N+1
+	@test pc.inds[6] == -3
+	@test pc.inds[7] == -1*(N+2)
 end
 
 function test_deposition(::Type{T}, n_cell, profile = :uniform, rtol = 0.01) where T
@@ -599,7 +600,7 @@ function test_initialize_reaction(::Type{T}) where T
 	product = [Xenon(1)]
 
 	# initialize the struct 
-	Xe_ionization = hp.Reaction{T}(table, product, [0.0, 0.0, 0.0, 0.0],[0.0, 0.0, 0.0, 0.0],  [0],[1], reactant, threshold_energy, 0)
+	Xe_ionization = hp.Reaction{T, LinearInterpolation}(table, product, [0.0, 0.0, 0.0, 0.0],[0.0, 0.0, 0.0, 0.0],  UInt8.([0]),UInt8.([1]), reactant, threshold_energy, UInt8(0))
 
 	# actually test 
 	@test Xe_ionization.reactant == reactant
@@ -668,7 +669,7 @@ function test_reaction_step(reactant_gas, product_gases, product_coefficients, r
 	# now can initialization for reaction properties 
 	# load the rate table 
 	threshold_energy, table = hp.read_reaction_rates(reaction_path)
-	reaction = hp.Reaction{T}(table, product_gases,  zeros(n_cell+2), zeros(n_cell+2), zeros(UInt8, length(product_gases)), product_coefficients, reactant_gas, threshold_energy, 0)
+	reaction = hp.Reaction{T, LinearInterpolation}(table, product_gases,  zeros(n_cell+2), zeros(n_cell+2), zeros(UInt8, length(product_gases)), product_coefficients, reactant_gas, threshold_energy, 0)
 
 	# initialize some electron properties
 	electron = hp.Gas(name=:e, mass=hp.m_e)
