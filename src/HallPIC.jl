@@ -222,16 +222,6 @@ function push_vel!(pc::ParticleContainer, dt::AbstractFloat)
 	return pc
 end
 
-"""
-$(TYPEDEF)
-
-Boundary Loops back around 
-"""
-
-struct PeriodicBoundary 
-
-end
-
 
 """
 $(TYPEDEF)
@@ -458,23 +448,6 @@ function find_cell_indices(cell_index, grid::Grid)
     return s, ic
 end
 
-function apply_boundary!(pc::ParticleContainer, grid::Grid, ::PeriodicBoundary, flag::Int8)
-    # flagging particles, then call remove flagged particles at the end of every step  
-    if flag == -1
-        for (ip, pos) in enumerate(pc.pos)
-            if (pos - grid.face_centers[2])/grid.dz <= -0.5  
-                pc.weight[ip] = 0.0
-            end
-        end
-    else
-        for (ip, pos) in enumerate(pc.pos)
-            if (pos - grid.face_centers[end-1])/grid.dz >= 0.5  
-                pc.weight[ip] = 0.0
-            end
-        end
-    end
-    return pc
-end
 
 function apply_boundary!(pc::ParticleContainer, grid::Grid, ::OpenBoundary, flag::Int8)
     # flagging particles, then call remove flagged particles at the end of every step  

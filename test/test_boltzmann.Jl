@@ -89,7 +89,7 @@ end
 plot()
 #figure()
 for n_cells in [100]
-	for n_particles in [100, 1000, 10000, 100000]
+	for n_particles in [100, 500, 1000, 5000, 10000, 50000, 100000]
 		@show n_cells, n_particles
 				
 		centers, phi = Boltzmann_basic_test(n_cells, n_particles)
