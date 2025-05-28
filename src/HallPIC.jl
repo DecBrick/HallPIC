@@ -815,7 +815,7 @@ function read_reaction_rates(filepath)
     # to maintain the normalization, the two densities need to be multiplied by n_0 
     # and the entire addition divided by n_0, results in a net multiplication of n_0
     # timestep is assumed to be normalized by t_0, so multiply by t_0 as well 
-    interp_object = LinearInterpolation(values[:,2] * n_0 * t_0 * 0.0, values[:,1])
+    interp_object = LinearInterpolation(values[:,2] * n_0 * t_0, values[:,1])
     return energy, interp_object
 end
 
